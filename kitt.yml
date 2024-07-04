@@ -1,0 +1,128 @@
+---
+profiles:
+  - springboot-web
+build:
+  buildType: maven-j17
+  docker:
+    app:
+      buildArgs:
+        zuluRuntime: 17-jre
+owner:
+  group: MX-MF2CLOUD
+deploy:
+  namespace: ns-test-apps
+  releaseType:
+    rollbackOnError: true
+    waitForReady: true
+    deployTimeout: 1200
+  stages:
+    - name: dev
+      target:
+        - cluster_id: [uscentral-dev-az-301]
+      refs: [branch]
+      helm:
+        values:
+          secrets:
+            akeyless: true
+            file_refresh: true
+            config:
+              akeyless:
+                path: /Prod/WCNP/homeoffice/MX-MF2CLOUD/Dev  #--> Path to the team AD Group
+            files:
+              - destination: sql-db-creds.txt
+                content: SqlServerPass
+              - destination: sql-db-user-creds.txt
+                content: SQLServerScape
+              - destination: azure-db2-creds.txt
+                content: Db2Pass
+              - destination: azure-db2-user-creds.txt
+                content: Db2User
+              - destination: blobstorage.txt
+                content: blobDev
+              - destination: bigQuery_oAuthPvtKey.json
+                content: GcpPass                
+          metadata:
+            annotations:
+              sidecar.istio.io/inject: 'true'
+              traffic.sidecar.istio.io/excludeOutboundPorts: 8080  
+            labels:
+              wm.env: '{{$.kittExec.currentStage.name}}'
+              ccm.serviceConfigVersion: NON-PROD-1.0
+              wm.app: APM0017373-MX-TEST-APPS-MX-TEST-APPS
+              ccm.serviceId: APM0017373-MX-TEST-APPS-MX-TEST-APPS
+              ccm.envProfile: '{{$.kittExec.currentCluster.profile}}'
+              ccm.node: node
+              ccm.zone: '{{$.kittExec.currentCluster.site}}'
+              ccm.consumerContext: '{{$.kitt.build.artifact}}'
+              ccm.providerContext: '{{$.kitt.build.artifact}}'
+          min:
+            cpu: 1
+            memory: 1024Mi
+          max:
+            cpu: 4
+            memory: 8192Mi
+          scaling:
+            custom: true
+            enabled: true
+            min: 1
+            max: 1
+          livenessProbe:
+            enabled: "false"
+            probeInterval: 60
+            initialDelaySeconds: 300
+            wait: 140
+            path: "/actuator/health"
+            port: 8080
+            failureThreshold: 3
+          readinessProbe:
+            enabled: "false"
+            probeInterval: 65
+            wait: 140
+            initialDelaySeconds: 300
+            path: "/actuator/health"
+            port: 8080
+            failureThreshold: 3
+            timeout: 50
+          networking:
+            httpsEnabled: true
+            httpEnabled: true
+            httpsRedirect: false
+            pathPrefix: /
+            externalPort: 8080
+            internalPort: 8080
+          global:
+            metrics:
+              enabled: true
+              remoteWriteSampleLimit: 250
+              endpoints:
+                - targetPort: 8080
+                  path: /actuator/prometheus
+              whitelist:
+                - http_server_requests_seconds_sum
+                - http_server_requests_seconds_count
+                - jvm_memory_max_bytes
+                - jvm_memory_used_bytes
+          env:
+            TZ: "America/Mexico_City"
+            JAVA_OPTS: >-
+              -Dio.strati.RuntimeContext=io.strati.impl.runtime.context.RuntimeContextEnv
+              -Dscm.root.dir.sandbox=/scm
+              -Dscm.server.access.enabled=true
+              -Dscm.snapshot.enabled=true
+              -Dscm.sandbox.enabled=true
+              -Dcom.walmart.platform.metrics.impl.type=MICROMETER
+              -Dcom.walmart.platform.txnmarking.otel.type=LOGGING
+              -Dscm.server.url=http://tunr.non-prod.walmart.com/scm-app/v2
+              -Dccm.configs.dir=/etc/config
+            JAVA_TOOL_OPTIONS: >-
+              -Dcom.sun.management.jmxremote.ssl=false
+              -Dcom.sun.management.jmxremote.authenticate=false
+              -Dcom.sun.management.jmxremote.local.only=false
+              -Dcom.sun.management.jmxremote.port=5432
+              -Dcom.sun.management.jmxremote.rmi.port=5432
+              -Djava.rmi.server.hostname=127.0.0.1
+alerts:
+  email: [vn55uc7@email.wal-mart.com]
+notify:
+  slack:
+    channelName: dummy-channel
